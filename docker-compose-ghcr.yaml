@@ -1,0 +1,186 @@
+version: "3.9"
+name: media-stack
+services:
+
+  vpn:
+    profiles: [ "vpn" ]
+    container_name: vpn
+    image: qmcgaw/gluetun:v3.39.1
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-nordvpn}
+      - OPENVPN_USER=${OPENVPN_USER:-"VebsrZ4cXqrbVCssLRoLqVUb"}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-"MMwd2wLZHLQWivDQDG9bB3Sk"}
+      - SERVER_COUNTRIES=${SERVER_COUNTRIES:-Switzerland}
+    networks:
+      - mynetwork
+    ports:
+     # qbittorrent ports
+     - 8080:8080
+     - 5080:5080
+     - 6881:6881
+     - 6881:6881/udp
+     # prowlarr ports
+     - 9696:9696
+     # flaresolver
+     - 8191:8191
+    restart: "unless-stopped"
+
+  qbittorrent:
+    profiles: [ "vpn", "no-vpn" ]
+    container_name: qbittorrent
+    image: ghcr.io/hotio/qbittorrent:latest
+    depends_on:
+      vpn:
+        condition: service_healthy
+    network_mode: service:vpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/qbittorrent:/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data:/data
+    restart: "unless-stopped"
+
+  radarr:
+    profiles: [ "vpn", "no-vpn" ]
+    container_name: radarr
+    image: ghcr.io/hotio/radarr:latest
+    networks:
+      mynetwork:
+        ipv4_address: ${RADARR_STATIC_CONTAINER_IP:-172.28.0.100}
+    logging:
+      driver: json-file
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    ports:
+      - 7878:7878
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/radarr:/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data:/data
+    restart: "unless-stopped"
+
+  sonarr:
+    profiles: [ "vpn", "no-vpn" ]
+    container_name: sonarr
+    image: ghcr.io/hotio/sonarr:latest
+    networks:
+      mynetwork:
+        ipv4_address: ${SONARR_STATIC_CONTAINER_IP:-172.28.0.101}
+    logging:
+      driver: json-file
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/sonarr:/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data:/data
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  prowlarr:
+    profiles: [ "vpn", "no-vpn" ]
+    container_name: prowlarr
+    image: ghcr.io/hotio/prowlarr:latest
+    depends_on:
+      vpn:
+        condition: service_healthy
+    network_mode: service:vpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/prowlarr:/config
+    restart: unless-stopped
+
+  readarr:
+    container_name: readarr
+    image: ghcr.io/hotio/readarr:latest
+    depends_on:
+      vpn:
+        condition: service_healthy
+    networks:
+      mynetwork:
+        ipv4_address: ${READARR_STATIC_CONTAINER_IP:-172.28.0.101}
+    logging:
+      driver: json-file
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/readarr:/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data:/data
+    ports:
+      - 8787:8787
+    restart: unless-stopped
+
+  bazarr:
+    container_name: bazarr
+    image: ghcr.io/hotio/bazarr:latest
+    depends_on:
+      vpn:
+        condition: service_healthy
+    networks:
+      mynetwork:
+        ipv4_address: ${BAZARR_STATIC_CONTAINER_IP:-172.28.0.101}
+    logging:
+      driver: json-file
+    ports:
+      - 6767:6767
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/bazarr:/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data:/data
+    restart: unless-stopped
+
+#  flaresolverr:
+#    # DockerHub mirror flaresolverr/flaresolverr:latest
+#    image: ghcr.io/flaresolverr/flaresolverr:latest
+#    container_name: flaresolverr
+#    depends_on:
+#      vpn:
+#        condition: service_healthy
+#    network_mode: service:vpn
+#    environment:
+#      - LOG_LEVEL=${LOG_LEVEL:-info}
+#      - LOG_HTML=${LOG_HTML:-false}
+#      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+#      - TZ=Europe/Rome
+#    restart: unless-stopped
+
+
+  jellyseerr:
+    profiles: [ "vpn", "no-vpn" ]
+    image: ghcr.io/hotio/jellyseerr:latest
+    container_name: jellyseerr
+    networks:
+      - mynetwork
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Amsterdam
+    volumes:
+      - ${CONFIG_PATH_ROOT_PATH:-./}config/jellyseer:/config #/app/config
+      - ${MEDIA_STACK_ROOT_PATH:-./}data/media:/media
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+
+networks:
+  mynetwork:
+    external: true
